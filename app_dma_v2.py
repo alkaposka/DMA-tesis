@@ -18,7 +18,16 @@ st.set_page_config(page_title="Ensayos DMA", layout="wide")
 # Estilo sobrio y tabla más compacta
 st.markdown("""
 <style>
-    .stDataFrame { font-size: 12px; }
+    /* Reducir fuente y padding en las tablas de datos */
+    .stDataFrame, .stDataFrame * {
+        font-size: 11px !important;
+        line-height: 1.2 !important;
+    }
+    .stDataFrame th, .stDataFrame td {
+        padding: 2px 4px !important;
+    }
+
+    /* Botones sobrios */
     .stButton>button {
         background-color: #ffffff;
         color: #333333;
@@ -28,6 +37,8 @@ st.markdown("""
     .stButton>button:hover {
         background-color: #f0f0f0;
     }
+
+    /* Títulos en gris oscuro */
     h1, h2, h3 { color: #333333; }
 </style>
 """, unsafe_allow_html=True)
@@ -318,7 +329,7 @@ with tab3:
                 'porcentaje_emulsion': '{:.1f}'
             }),
             use_container_width=True,
-            height=400
+            height=300
         )
 
         # ==========================
