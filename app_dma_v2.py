@@ -1,6 +1,6 @@
 """
 Aplicación Streamlit para gestión de ensayos DMA con Supabase.
-Incluye: agregar ensayos, gestionar muestras, visualizar datos y predecir resultados.
+Incluye seguridad simple por contraseña.
 """
 
 import streamlit as st
@@ -18,7 +18,15 @@ st.set_page_config(page_title="Ensayos DMA", layout="wide")
 # Estilo sobrio y tabla más compacta
 st.markdown("""
 <style>
-    .stDataFrame { font-size: 12px; }
+    /* Reducir fuente y padding en las tablas de datos */
+    .stDataFrame, .stDataFrame * {
+        font-size: 11px !important;
+        line-height: 1.2 !important;
+    }
+    .stDataFrame th, .stDataFrame td {
+        padding: 2px 4px !important;
+    }
+    /* Botones sobrios */
     .stButton>button {
         background-color: #ffffff;
         color: #333333;
@@ -31,6 +39,29 @@ st.markdown("""
     h1, h2, h3 { color: #333333; }
 </style>
 """, unsafe_allow_html=True)
+
+# ==============================
+# SEGURIDAD (barra lateral)
+# ==============================
+if "autenticado" not in st.session_state:
+    st.session_state["autenticado"] = False
+
+with st.sidebar:
+    st.header("Acceso")
+    if not st.session_state["autenticado"]:
+        password_input = st.text_input("Contraseña", type="password")
+        if st.button("Ingresar"):
+            if password_input == st.secrets["APP_PASSWORD"]:
+                st.session_state["autenticado"] = True
+                st.success("Acceso concedido")
+                st.rerun()
+            else:
+                st.error("Contraseña incorrecta")
+    else:
+        st.success("Sesión iniciada")
+        if st.button("Cerrar sesión"):
+            st.session_state["autenticado"] = False
+            st.rerun()
 
 # ==============================
 # CONEXIÓN A SUPABASE
@@ -93,38 +124,15 @@ def cargar_ensayos():
 # ==============================
 # PESTAÑAS
 # ==============================
-# ---------- SEGURIDAD ----------
-if "autenticado" not in st.session_state:
-    st.session_state["autenticado"] = False
-
-# Formulario de login en la barra lateral
-with st.sidebar:
-    if not st.session_state["autenticado"]:
-        st.header("Acceso")
-        password_input = st.text_input("Contraseña", type="password")
-        if st.button("Ingresar"):
-            if password_input == st.secrets["APP_PASSWORD"]:
-                st.session_state["autenticado"] = True
-                st.success("Acceso concedido")
-                st.rerun()
-            else:
-                st.error("Contraseña incorrecta")
-    else:
-        st.success("Sesión iniciada")
-        if st.button("Cerrar sesión"):
-            st.session_state["autenticado"] = False
-            st.rerun()
-# -----------------------------------
 tab1, tab2, tab3, tab4 = st.tabs(["Agregar Ensayo", "Gestionar Muestras", "Visualizar Datos", "Predecir Resultado"])
 
 # ==============================
 # PESTAÑA 1: AGREGAR ENSAYO
 # ==============================
-if not st.session_state["autenticado"]:
-    st.warning("Debe ingresar la contraseña para agregar ensayos.")
-    st.stop()
 with tab1:
-    
+    if not st.session_state["autenticado"]:
+        st.warning("Debe iniciar sesión (barra lateral) para agregar ensayos.")
+        st.stop()
     st.header("Nuevo Ensayo DMA")
     muestras_df = cargar_muestras()
     opciones_muestras = ['Sin muestra'] + muestras_df['nomenclatura'].tolist()
@@ -149,7 +157,6 @@ with tab1:
         with col2:
             altura = st.number_input("Altura (mm)", value=None, format="%.2f")
             diametro = st.number_input("Diámetro (mm)", value=None, format="%.2f")
-            # Codigo probeta no se usa en la nueva tabla, lo omitimos
         with col3:
             f_estatica = st.number_input("Fuerza Estática [N]", value=-3.0, format="%.4f")
             min_des = st.number_input("Min Des Din [m]", value=0.0, format="%.6e")
@@ -172,31 +179,18 @@ with tab1:
 
         enviado = st.form_submit_button("Guardar Ensayo")
         if enviado:
-            # Comprobación básica de duplicados (misma fecha, muestra/cantera, %emulsion, fuerza)
             conn = get_conn()
             cur = conn.cursor()
-            # Preparamos condiciones según si hay muestra o no
+            # Duplicados
             if id_muestra is not None:
-                duplicado_query = """
-                    SELECT COUNT(*) FROM ensayos_iniciales
-                    WHERE fecha = %s AND id_muestra = %s AND porcentaje_emulsion = %s AND fuerza_estatica = %s
-                """
-                duplicado_params = (fecha.isoformat(), id_muestra, p_emulsion if p_emulsion != 0.0 else None, f_estatica)
+                dup_query = "SELECT COUNT(*) FROM ensayos_iniciales WHERE fecha=%s AND id_muestra=%s AND porcentaje_emulsion=%s AND fuerza_estatica=%s"
+                dup_params = (fecha.isoformat(), id_muestra, p_emulsion if p_emulsion != 0.0 else None, f_estatica)
             else:
-                duplicado_query = """
-                    SELECT COUNT(*) FROM ensayos_iniciales
-                    WHERE fecha = %s AND id_cantera = %s AND porcentaje_emulsion = %s AND fuerza_estatica = %s
-                """
-                duplicado_params = (fecha.isoformat(), id_cantera, p_emulsion if p_emulsion != 0.0 else None, f_estatica)
-
-            cur.execute(duplicado_query, duplicado_params)
-            existe = cur.fetchone()[0] > 0
-            if existe:
-                st.warning("⚠️ Ya existe un ensayo con la misma fecha, muestra/cantera, % emulsión y fuerza estática. Si es un duplicado real, no lo guarde.")
-                # No detenemos, solo advertimos; puedes decidir cancelar con un botón adicional
-                # Para simplicidad, seguimos con la inserción, pero puedes añadir lógica de confirmación.
-                # Si quieres cancelar automáticamente, usa st.stop() aquí (descomenta)
-                # st.stop()
+                dup_query = "SELECT COUNT(*) FROM ensayos_iniciales WHERE fecha=%s AND id_cantera=%s AND porcentaje_emulsion=%s AND fuerza_estatica=%s"
+                dup_params = (fecha.isoformat(), id_cantera, p_emulsion if p_emulsion != 0.0 else None, f_estatica)
+            cur.execute(dup_query, dup_params)
+            if cur.fetchone()[0] > 0:
+                st.warning("⚠️ Ya existe un ensayo con esos mismos valores. Si es un duplicado, no lo guarde.")
             try:
                 cur.execute("""
                     INSERT INTO ensayos_iniciales 
@@ -231,10 +225,10 @@ with tab1:
 # ==============================
 # PESTAÑA 2: GESTIONAR MUESTRAS
 # ==============================
-if not st.session_state["autenticado"]:
-    st.warning("Debe ingresar la contraseña para agregar ensayos.")
-    st.stop()
 with tab2:
+    if not st.session_state["autenticado"]:
+        st.warning("Debe iniciar sesión (barra lateral) para gestionar muestras.")
+        st.stop()
     st.header("Muestras (Nomenclaturas)")
     muestras_df = cargar_muestras()
     st.dataframe(muestras_df, use_container_width=True)
@@ -288,11 +282,9 @@ with tab2:
 with tab3:
     st.header("Exploración de Ensayos")
     df = cargar_ensayos()
-
     if df.empty:
-        st.info("No hay datos todavía. Agregue ensayos en la pestaña correspondiente.")
+        st.info("No hay datos todavía.")
     else:
-        # Filtros (por defecto sin filtros activos)
         with st.expander("Filtros", expanded=False):
             colf1, colf2, colf3 = st.columns(3)
             with colf1:
@@ -307,35 +299,22 @@ with tab3:
                 opciones_emulsion = ['Sin % emulsión'] + sorted(em_unicos)
                 filtro_emulsion = st.multiselect("% Emulsión", options=opciones_emulsion, default=[])
 
-        # Aplicar filtros solo si el usuario seleccionó algo
-        mask = pd.Series([True] * len(df))  # sin filtro por defecto
-
+        mask = pd.Series([True] * len(df))
         if filtro_cantera:
             if 'Sin cantera' in filtro_cantera:
-                mask_cantera = df['cantera'].isna() | df['cantera'].isin(
-                    [c for c in filtro_cantera if c != 'Sin cantera']
-                )
+                mask &= (df['cantera'].isna() | df['cantera'].isin([c for c in filtro_cantera if c != 'Sin cantera']))
             else:
-                mask_cantera = df['cantera'].isin(filtro_cantera)
-            mask &= mask_cantera
-
+                mask &= df['cantera'].isin(filtro_cantera)
         if filtro_resultado:
             mask &= df['resultado'].isin(filtro_resultado)
-
         if filtro_emulsion:
             if 'Sin % emulsión' in filtro_emulsion:
-                mask_emulsion = df['porcentaje_emulsion'].isna() | df['porcentaje_emulsion'].isin(
-                    [e for e in filtro_emulsion if e != 'Sin % emulsión']
-                )
+                mask &= (df['porcentaje_emulsion'].isna() | df['porcentaje_emulsion'].isin([e for e in filtro_emulsion if e != 'Sin % emulsión']))
             else:
-                mask_emulsion = df['porcentaje_emulsion'].isin(filtro_emulsion)
-            mask &= mask_emulsion
+                mask &= df['porcentaje_emulsion'].isin(filtro_emulsion)
 
         df_filtrado = df[mask]
 
-        # ==========================
-        # TABLA DE DATOS (¡agregada!)
-        # ==========================
         st.subheader("Tabla de datos")
         st.dataframe(
             df_filtrado.style.format({
@@ -347,32 +326,22 @@ with tab3:
                 'porcentaje_emulsion': '{:.1f}'
             }),
             use_container_width=True,
-            height=400
+            height=300  # reducida para ver más filas
         )
 
-        # ==========================
-        # GRÁFICOS
-        # ==========================
-        st.subheader("📈 Análisis visual")
+        st.subheader("Análisis visual")
         colg1, colg2 = st.columns(2)
-
         with colg1:
-            st.markdown("**Resultados por % de emulsión**")
             if not df_filtrado.empty:
                 pivote = df_filtrado.groupby(['porcentaje_emulsion', 'resultado']).size().unstack(fill_value=0)
                 colors = sns.color_palette("pastel", n_colors=len(pivote.columns))
                 fig, ax = plt.subplots(figsize=(6, 4))
                 pivote.plot(kind='bar', stacked=True, ax=ax, color=colors)
                 ax.set_xlabel("% Emulsión")
-                ax.set_ylabel("Cantidad de ensayos")
+                ax.set_ylabel("Cantidad")
                 ax.legend(title="Resultado", bbox_to_anchor=(1.05, 1), loc='upper left')
-                ax.grid(axis='y', linestyle='--', alpha=0.5)
                 st.pyplot(fig)
-            else:
-                st.write("Sin datos para graficar.")
-
         with colg2:
-            st.markdown("**Fuerza estática vs % Emulsión**")
             if not df_filtrado.empty:
                 fig, ax = plt.subplots(figsize=(6, 4))
                 res_unicos = df_filtrado['resultado'].unique()
@@ -385,21 +354,10 @@ with tab3:
                 ax.set_xlabel("% Emulsión")
                 ax.set_ylabel("Fuerza Estática [N]")
                 ax.legend(title="Resultado", bbox_to_anchor=(1.05, 1), loc='upper left')
-                ax.grid(True, linestyle='--', alpha=0.5)
                 st.pyplot(fig)
-            else:
-                st.write("Sin datos para graficar.")
 
-        # ==========================
-        # DESCARGA DE CSV
-        # ==========================
         csv = df_filtrado.to_csv(index=False)
-        st.download_button(
-            label="⬇️ Descargar datos filtrados como CSV",
-            data=csv,
-            file_name="ensayos_filtrados.csv",
-            mime="text/csv"
-        )
+        st.download_button("Descargar CSV", data=csv, file_name="ensayos_filtrados.csv", mime="text/csv")
 
 # ==============================
 # PESTAÑA 4: PREDECIR RESULTADO
@@ -417,8 +375,6 @@ with tab4:
 
     df_model = cargar_ensayos()
     df_model = df_model.dropna(subset=['porcentaje_emulsion', 'resultado']).copy()
-
-    # Crear variable objetivo
     df_model['exito'] = (df_model['resultado'] == 'Exitoso').astype(int)
 
     features = ['cantera', 'porcentaje_emulsion', 'fuerza_estatica', 'max_des_din', 'max_fuer_din']
@@ -426,9 +382,8 @@ with tab4:
     y = df_model['exito']
 
     if len(y.unique()) < 2:
-        st.info("Aún no hay suficientes ejemplos de ambos resultados (éxito y fallo) para entrenar un modelo fiable.")
+        st.info("Aún no hay suficientes ejemplos de ambos resultados para entrenar un modelo fiable.")
     else:
-        # Preprocesamiento
         numeric_features = ['porcentaje_emulsion', 'fuerza_estatica', 'max_des_din', 'max_fuer_din']
         categorical_features = ['cantera']
 
@@ -440,25 +395,20 @@ with tab4:
             ('imputer', SimpleImputer(strategy='most_frequent')),
             ('label', LabelEncoder())
         ])
-
         preprocessor = ColumnTransformer(
             transformers=[
                 ('num', numeric_transformer, numeric_features),
                 ('cat', categorical_transformer, categorical_features)
             ])
-
         model = Pipeline(steps=[
             ('preprocessor', preprocessor),
             ('classifier', RandomForestClassifier(n_estimators=100, random_state=42))
         ])
-
         model.fit(X, y)
 
-        # Validación cruzada
         scores = cross_val_score(model, X, y, cv=min(5, len(y)), scoring='accuracy')
         st.metric("Precisión promedio (validación cruzada)", f"{scores.mean():.2f}")
 
-        # Importancia
         st.subheader("Importancia de variables")
         importances = model.named_steps['classifier'].feature_importances_
         fig_imp, ax_imp = plt.subplots()
@@ -466,8 +416,7 @@ with tab4:
         ax_imp.set_xlabel("Importancia")
         st.pyplot(fig_imp)
 
-        # Formulario de predicción
-        st.subheader("🔎 Simular un nuevo ensayo")
+        st.subheader("Simular un nuevo ensayo")
         with st.form("form_prediccion"):
             colp1, colp2 = st.columns(2)
             with colp1:
@@ -478,8 +427,7 @@ with tab4:
             with colp2:
                 p_max_des = st.number_input("Max Des Din [m]", value=1.0e-4, format="%.6e")
                 p_max_fdin = st.number_input("Max Fuer Din [N]", value=2.0)
-            predecir = st.form_submit_button("🔮 Predecir resultado")
-
+            predecir = st.form_submit_button("Predecir")
             if predecir:
                 input_data = pd.DataFrame({
                     'cantera': [p_cantera],
@@ -491,6 +439,6 @@ with tab4:
                 proba = model.predict_proba(input_data)[0][1]
                 pred = model.predict(input_data)[0]
                 if pred == 1:
-                    st.success(f"🎉 Probabilidad de ÉXITO: {proba:.0%}")
+                    st.success(f"Probabilidad de ÉXITO: {proba:.0%}")
                 else:
-                    st.error(f"⚠️ Probabilidad de FALLO: {1 - proba:.0%} (éxito: {proba:.0%})")
+                    st.error(f"Probabilidad de FALLO: {1 - proba:.0%} (éxito: {proba:.0%})")
