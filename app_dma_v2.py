@@ -18,16 +18,7 @@ st.set_page_config(page_title="Ensayos DMA", layout="wide")
 # Estilo sobrio y tabla más compacta
 st.markdown("""
 <style>
-    /* Reducir fuente y padding en las tablas de datos */
-    .stDataFrame, .stDataFrame * {
-        font-size: 11px !important;
-        line-height: 1.2 !important;
-    }
-    .stDataFrame th, .stDataFrame td {
-        padding: 2px 4px !important;
-    }
-
-    /* Botones sobrios */
+    .stDataFrame { font-size: 12px; }
     .stButton>button {
         background-color: #ffffff;
         color: #333333;
@@ -37,8 +28,6 @@ st.markdown("""
     .stButton>button:hover {
         background-color: #f0f0f0;
     }
-
-    /* Títulos en gris oscuro */
     h1, h2, h3 { color: #333333; }
 </style>
 """, unsafe_allow_html=True)
@@ -104,12 +93,38 @@ def cargar_ensayos():
 # ==============================
 # PESTAÑAS
 # ==============================
+# ---------- SEGURIDAD ----------
+if "autenticado" not in st.session_state:
+    st.session_state["autenticado"] = False
+
+# Formulario de login en la barra lateral
+with st.sidebar:
+    if not st.session_state["autenticado"]:
+        st.header("Acceso")
+        password_input = st.text_input("Contraseña", type="password")
+        if st.button("Ingresar"):
+            if password_input == st.secrets["APP_PASSWORD"]:
+                st.session_state["autenticado"] = True
+                st.success("Acceso concedido")
+                st.rerun()
+            else:
+                st.error("Contraseña incorrecta")
+    else:
+        st.success("Sesión iniciada")
+        if st.button("Cerrar sesión"):
+            st.session_state["autenticado"] = False
+            st.rerun()
+# -----------------------------------
 tab1, tab2, tab3, tab4 = st.tabs(["Agregar Ensayo", "Gestionar Muestras", "Visualizar Datos", "Predecir Resultado"])
 
 # ==============================
 # PESTAÑA 1: AGREGAR ENSAYO
 # ==============================
+if not st.session_state["autenticado"]:
+    st.warning("Debe ingresar la contraseña para agregar ensayos.")
+    st.stop()
 with tab1:
+    
     st.header("Nuevo Ensayo DMA")
     muestras_df = cargar_muestras()
     opciones_muestras = ['Sin muestra'] + muestras_df['nomenclatura'].tolist()
@@ -216,6 +231,9 @@ with tab1:
 # ==============================
 # PESTAÑA 2: GESTIONAR MUESTRAS
 # ==============================
+if not st.session_state["autenticado"]:
+    st.warning("Debe ingresar la contraseña para agregar ensayos.")
+    st.stop()
 with tab2:
     st.header("Muestras (Nomenclaturas)")
     muestras_df = cargar_muestras()
@@ -329,7 +347,7 @@ with tab3:
                 'porcentaje_emulsion': '{:.1f}'
             }),
             use_container_width=True,
-            height=500
+            height=400
         )
 
         # ==========================
