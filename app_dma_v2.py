@@ -329,7 +329,7 @@ with tab3:
                 'porcentaje_emulsion': '{:.1f}'
             }),
             use_container_width=True,
-            height=300
+            height=500
         )
 
         # ==========================
