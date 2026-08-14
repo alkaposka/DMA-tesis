@@ -85,7 +85,7 @@ def get_conn():
 @st.cache_data(ttl=5)
 def cargar_canteras():
     conn = get_conn()
-    df = pd.read_sql("SELECT id_cantera, nombre FROM canteras ORDER BY nombre", conn)
+    df = pd.read_sql("SELECT id_cantera, nombre FROM public.canteras ORDER BY nombre", conn)
     conn.close()
     return df
 
@@ -95,7 +95,7 @@ def cargar_muestras():
     df = pd.read_sql("""
         SELECT m.id_muestra, m.nomenclatura, c.nombre AS cantera,
                m.densidad, m.humedad, m.tipo_emulsificante, m.porcentaje_emulsificante
-        FROM muestras m
+        FROM public.muestras m
         JOIN canteras c ON m.id_cantera = c.id_cantera
         ORDER BY m.nomenclatura
     """, conn)
@@ -114,7 +114,7 @@ def cargar_ensayos():
                e.fuerza_estatica, e.min_des_din, e.max_des_din,
                e.max_fuer_din, e.min_fuer_din,
                e.resultado, e.observacion
-        FROM ensayos_iniciales e
+        FROM public.ensayos_iniciales e
         LEFT JOIN muestras m ON e.id_muestra = m.id_muestra
         LEFT JOIN canteras c ON e.id_cantera = c.id_cantera
         ORDER BY e.fecha DESC, e.id_ensayo DESC
