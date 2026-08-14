@@ -75,6 +75,8 @@ def get_conn():
         password=st.secrets["supabase"]["password"],
         port=st.secrets["supabase"]["port"]
     )
+    with conn.cursor() as cur:
+        cur.execute("SET search_path TO public")
     return conn
 
 # ==============================
